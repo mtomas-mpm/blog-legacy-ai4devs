@@ -78,7 +78,10 @@ test.group('POST /posts/:slug/comentarios', (group) => {
     assert.equal(fila.post_id, ID_POST)
     assert.match(fila.creado_en, FORMATO_FECHA_SQL)
     assert.equal(fila.creado_en, respuesta.body().comentario.creado_en)
-    const desfase = DateTime.utc().diff(DateTime.fromSQL(fila.creado_en, { zone: 'utc' }), 'seconds')
+    const desfase = DateTime.utc().diff(
+      DateTime.fromSQL(fila.creado_en, { zone: 'utc' }),
+      'seconds'
+    )
     assert.isBelow(Math.abs(desfase.seconds), 60)
   })
 
@@ -285,10 +288,7 @@ test.group('POST /posts/:slug/comentarios', (group) => {
     assert.deepEqual(respuesta.body(), { error: 'El nombre es obligatorio' })
   })
 
-  test('sin correo y con el cuerpo corto gana el error del correo', async ({
-    client,
-    assert,
-  }) => {
+  test('sin correo y con el cuerpo corto gana el error del correo', async ({ client, assert }) => {
     // Arrange
     await insertarPost()
 
@@ -298,5 +298,36 @@ test.group('POST /posts/:slug/comentarios', (group) => {
     // Assert
     respuesta.assertStatus(422)
     assert.deepEqual(respuesta.body(), { message: 'Falta el email' })
+  })
+
+  test('un nombre falsy que no es texto (0) cuenta como ausente: 400', async ({
+    client,
+    assert,
+  }) => {
+    // Arrange
+    await insertarPost()
+
+    // Act
+    const respuesta = await client.post(RUTA).json({ ...ENTRADA_VALIDA, autor_nombre: 0 })
+
+    // Assert
+    respuesta.assertStatus(400)
+    assert.deepEqual(respuesta.body(), { error: 'El nombre es obligatorio' })
+    assert.equal(await contarComentariosDelPost(), 0)
+  })
+
+  test('acepta un nombre numérico y devuelve el texto que guarda SQLite: "123.0"', async ({
+    client,
+    assert,
+  }) => {
+    // Arrange
+    await insertarPost()
+
+    // Act
+    const respuesta = await client.post(RUTA).json({ ...ENTRADA_VALIDA, autor_nombre: 123 })
+
+    // Assert
+    respuesta.assertStatus(201)
+    assert.strictEqual(respuesta.body().comentario.autor_nombre, '123.0')
   })
 })

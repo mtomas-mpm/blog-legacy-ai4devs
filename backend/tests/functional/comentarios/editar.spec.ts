@@ -12,6 +12,11 @@ import {
 const CUERPO_ORIGINAL = 'Un comentario suficientemente largo.'
 const CUERPO_NUEVO = 'Lo reescribo con más calma.'
 
+async function cuerpoGuardado(id: number) {
+  const fila = await buscarComentario(id)
+  return fila.cuerpo
+}
+
 test.group('PATCH /comentarios/:id', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
@@ -66,6 +71,22 @@ test.group('PATCH /comentarios/:id', (group) => {
     assert.equal(fila.creado_en, '2026-01-02 09:30:00')
   })
 
+  test('devuelve creado_en a null si la fila no tiene fecha', async ({ client, assert }) => {
+    // Arrange
+    await insertarPost()
+    const id = await insertarComentario({ creado_en: null })
+
+    // Act
+    const respuesta = await client
+      .patch(`/comentarios/${id}`)
+      .json({ autor_email: 'lucia.ferrer@ejemplo.es', cuerpo: CUERPO_NUEVO })
+
+    // Assert
+    respuesta.assertStatus(200)
+    assert.property(respuesta.body().comentario, 'creado_en')
+    assert.isNull(respuesta.body().comentario.creado_en)
+  })
+
   test('acepta un cuerpo de un solo carácter', async ({ client, assert }) => {
     // Arrange
     await insertarPost()
@@ -94,7 +115,7 @@ test.group('PATCH /comentarios/:id', (group) => {
     // Assert
     respuesta.assertStatus(403)
     assert.deepEqual(respuesta.body(), { error: 'No puedes editar este comentario' })
-    assert.equal((await buscarComentario(id)).cuerpo, CUERPO_ORIGINAL)
+    assert.equal(await cuerpoGuardado(id), CUERPO_ORIGINAL)
   })
 
   test('responde 403 si el comentario ya está aprobado, aunque el correo coincida', async ({
@@ -113,7 +134,7 @@ test.group('PATCH /comentarios/:id', (group) => {
     // Assert
     respuesta.assertStatus(403)
     assert.deepEqual(respuesta.body(), { error: 'No puedes editar este comentario' })
-    assert.equal((await buscarComentario(id)).cuerpo, CUERPO_ORIGINAL)
+    assert.equal(await cuerpoGuardado(id), CUERPO_ORIGINAL)
   })
 
   test('responde 403 con la clave de moderación: aquí no sirve', async ({ client, assert }) => {
@@ -130,7 +151,7 @@ test.group('PATCH /comentarios/:id', (group) => {
     // Assert
     respuesta.assertStatus(403)
     assert.deepEqual(respuesta.body(), { error: 'No puedes editar este comentario' })
-    assert.equal((await buscarComentario(id)).cuerpo, CUERPO_ORIGINAL)
+    assert.equal(await cuerpoGuardado(id), CUERPO_ORIGINAL)
   })
 
   test('responde 400 si falta el cuerpo y no toca la fila', async ({ client, assert }) => {
@@ -146,7 +167,7 @@ test.group('PATCH /comentarios/:id', (group) => {
     // Assert
     respuesta.assertStatus(400)
     assert.deepEqual(respuesta.body(), { error: 'Falta el cuerpo' })
-    assert.equal((await buscarComentario(id)).cuerpo, CUERPO_ORIGINAL)
+    assert.equal(await cuerpoGuardado(id), CUERPO_ORIGINAL)
   })
 
   test('comprueba el permiso antes que la entrada: 403 aunque falte el cuerpo', async ({
